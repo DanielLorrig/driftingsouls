@@ -400,8 +400,8 @@ public class KSAttackAction extends BasicKSAction {
         {
           //Den Offizier des Traegerschiffs identifizieren
           Offizier offizier;
-          offizier = shipService.getBaseShip(s.getShip()).getOffizier();
-          
+          offizier = s.getShip().getBaseShip().getOffizier();
+
           //testen, ob es ueberhaupt einen Offizier zu retten gibt
           if (offizier != null)
           {
@@ -423,11 +423,11 @@ public class KSAttackAction extends BasicKSAction {
           s.addFlag(BattleShipFlag.FLUCHT);
           s.addFlag(BattleShipFlag.SECONDROW);
 
-               
+
           //und jetzt raeumen wir noch auf
-          shipActionService.recalculateShipStatus(s.getShip());
-			shipActionService.recalculateShipStatus(shipService.getBaseShip(s.getShip()));
-		
+          s.getShip().recalculateShipStatus();
+          s.getShip().getBaseShip().recalculateShipStatus();
+
           }
         else
         {
@@ -1840,27 +1840,27 @@ public class KSAttackAction extends BasicKSAction {
 		String answer;
 		if (chance == 0)
 		{
-			answer = "nicht vorhanden";
+			answer = "nicht vorhanden ("+chance+"%)";
 		}
 		else if (chance <=  25)
 		{
-			answer = "gering";
+			answer = "gering ("+chance+"%)";
 		}
 		else if ( chance <= 50)
 		{
-			answer = "ausreichend";
+			answer = "ausreichend ("+chance+"%)";
 		}
 		else if ( chance <= 75)
 		{
-			answer = "gut";
+			answer = "gut ("+chance+"%)";
 		}
 		else if ( chance <= 99)
 		{
-			answer = "hervorragend";
+			answer = "hervorragend ("+chance+"%)";
 		}
 		else
 		{
-			answer = "unfehlbar";
+			answer = "unfehlbar ("+chance+"%)";
 		}
 		return answer;
 	}
