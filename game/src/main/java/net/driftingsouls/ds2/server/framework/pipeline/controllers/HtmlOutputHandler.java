@@ -85,8 +85,11 @@ public class HtmlOutputHandler extends OutputHandler
 	private void appendDevModeJavascript(Writer sb) throws IOException
 	{
 		File jsdir = new File(Configuration.getAbsolutePath()+"data/javascript/");
-		File libdir = new File(jsdir.getAbsolutePath()+"/libs");
-		File commondir = new File(jsdir.getAbsolutePath()+"/common");
+//		File libdir = new File(jsdir.getAbsolutePath()+"libs");
+//		File commondir = new File(jsdir.getAbsolutePath()+"common");
+
+		File libdir = new File("/opt/tomcat/latest/webapps/ds/data/javascript/libs");
+		File commondir = new File("/opt/tomcat/latest/webapps/ds/data/javascript/common");
 
 		List<String> specialJsLibs = Arrays.asList("jquery-2.1.1.min.js", "jquery-ui-1.11.2.min.js");
 
