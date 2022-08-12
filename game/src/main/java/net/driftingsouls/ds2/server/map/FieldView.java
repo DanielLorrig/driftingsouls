@@ -8,6 +8,7 @@ import net.driftingsouls.ds2.server.entities.Nebel;
 import net.driftingsouls.ds2.server.entities.User;
 import net.driftingsouls.ds2.server.ships.Ship;
 import net.driftingsouls.ds2.server.ships.ShipType;
+import net.driftingsouls.ds2.server.Location;
 
 import java.util.List;
 import java.util.Map;
@@ -65,4 +66,6 @@ public interface FieldView
 	 * @return <code>true</code>, falls dem so ist
 	 */
 	boolean isRoterAlarm();
+
+	Location getLocation();
 }
