@@ -52,9 +52,9 @@ public class PlayerFieldView implements FieldView
 	{
 		this.field = new Field(db, position);
 		this.user = user;
-        this.scanShip = scanShip;
+		this.scanShip = scanShip;
 		this.db = db;
-        this.location = position;
+		this.location = position;
 		this.inScanRange = this.isInScanRange();
 	}
 
@@ -314,5 +314,10 @@ public class PlayerFieldView implements FieldView
 
         Relations relations = user.getRelations();
 		return relations.isOnly(owner, Relation.FRIEND);
+	}
+
+	@Override
+	public Location getLocation(){
+		return location;
 	}
 }

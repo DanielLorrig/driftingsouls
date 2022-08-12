@@ -438,7 +438,8 @@ public class StarmapController implements DSController, PermissionResolver {
 		List<MapController.SectorViewModel.UserWithShips> users = new ArrayList<>();
 		for (Map.Entry<User, Map<ShipType, List<Ship>>> owner : field.getShips().entrySet())
 		{
-			MapController.SectorViewModel.UserWithShips jsonUser = new MapController.SectorViewModel.UserWithShips();
+			int count = 0;
+            MapController.SectorViewModel.UserWithShips jsonUser = new MapController.SectorViewModel.UserWithShips();
 			jsonUser.name = Common._text(owner.getKey().getName());
 			jsonUser.id = owner.getKey().getId();
 			jsonUser.race = owner.getKey().getRace();
@@ -463,6 +464,9 @@ public class StarmapController implements DSController, PermissionResolver {
 						MapController.SectorViewModel.OwnShipViewModel ownShip = new MapController.SectorViewModel.OwnShipViewModel();
 						ownShip.gelandet = ship.getLandedCount();
 						ownShip.maxGelandet = typeData.getJDocks();
+                        ownShip.x = field.getLocation().getX();
+                        ownShip.y = field.getLocation().getY();
+                        ownShip.isOwner = true;
 
 						ownShip.energie = ship.getEnergy();
 						ownShip.maxEnergie = typeData.getEps();
@@ -486,14 +490,13 @@ public class StarmapController implements DSController, PermissionResolver {
 					else
 					{
 						shipObj = new MapController.SectorViewModel.ShipViewModel();
+                        shipObj.isOwner = false;
 					}
 					shipObj.id = ship.getId();
 					shipObj.name = ship.getName();
 					shipObj.gedockt = ship.getDockedCount();
 					shipObj.maxGedockt = typeData.getADocks();
-                    shipObj.isOwner = ship.getOwner().getId() == user.getId();
                     shipObj.race = ship.getOwner().getRace();
-
 
 					if (ship.getFleet() != null)
 					{
@@ -504,7 +507,9 @@ public class StarmapController implements DSController, PermissionResolver {
 				}
                 jsonShiptype.count = jsonShiptype.ships.size();
 				jsonUser.shiptypes.add(jsonShiptype);
-			}
+                count += jsonShiptype.count;
+            }
+            jsonUser.count = count;
 			users.add(jsonUser);
 		}
 		return users;
