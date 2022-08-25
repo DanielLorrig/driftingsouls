@@ -4,14 +4,19 @@ var Starmap = function(){
     //maxY = 25*400;
     var system;
     var target = document.getElementById("draggable");
+
     var starmapCanvas = new StarmapCanvas(this);
+
     var scanableLocations = [];
-    var currentShip=-1;
+    var scanships = {};
+    var currentShip;
+    var flight;
 
     function setSystem(newSystem)
     {
         system = newSystem;
         scanships = {};
+
     }
 
     function getSystem()
@@ -23,10 +28,14 @@ var Starmap = function(){
     {
         scanableLocations.push(location);
     }
+    function registerScanship(scanship)
+    {
+        scanships[scanship.shipId] = {x:scanship.location.x, y:scanship.location.y, r:scanship.scanRange};
+    }
 
     function executeActionAtLocation(location)
     {
-        if(currentShip == -1)
+        if(currentShip == null || currentShip.id == -1)
         {
             var locations = scanableLocations.filter(x => x.x == location.x && x.y == location.y);
             var location = locations[0];
@@ -35,38 +44,75 @@ var Starmap = function(){
                 loadSectorData(location.x, location.y, location.shipId);
             }
         }
+        else
+        {
+            flight = {shipId: currentShip.id, location:location};
+            starmapCanvas.renderFlightConfirmation(location, currentShip);
+        }
     }
 
-    function setCurrentShip(shipId)
+    function setCurrentShip(ship)
     {
-        currentShip = shipId;
+        currentShip = ship;
+        if(ship != null) starmapCanvas.renderShipChosen(ship);
+    }
+    function abortFlight()
+    {
+        setCurrentShip(null);
+        starmapCanvas.derenderMapAction();
+    }
+    function confirmFlight()
+    {
+        //http://localhost:8080/ds/ds?FORMAT=JSON&module=schiffAjax&action=fliegeSchiff&schiff=1857304&x=31&y=33
+        jQuery.getJSON(DS.getUrl(),{FORMAT:'JSON', module:'schiffAjax', action:'fliegeSchiff', schiff:flight.shipId, x:flight.location.x, y:flight.location.y})
+        .done(function(resp){ReloadSystem();});
+        //jQuery.getJSON(DS.getUrl(),{FORMAT:'JSON', module:'schiffAjax', action:'fliegeSchiff', schiff:flight.shipId, x:flight.location.x, y:flight.location.y}, function(resp){ReloadSystem();});
+        setCurrentShip(null);
+        starmapCanvas.derenderMapAction();
+    }
+
+    function getCurrentShip()
+    {
+        return currentShip;
+    }
+
+    function getScanships()
+    {
+        return scanships;
     }
 
     this.setSystem = setSystem;
     this.getSystem = getSystem;
 
     this.setCoordinates = starmapCanvas.setCoordinates;
-    //this.onclick = onclick;
+
     this.setMarkerToCoordinates = starmapCanvas.setMarkerToCoordinates;
     this.getLocationFromPixels = starmapCanvas.getLocationFromPixels;
-    //this.registerScanship = registerScanship;
     this.elementWidth = starmapCanvas.elementWidth;
     this.elementHeight = starmapCanvas.elementHeight;
     this.executeActionAtLocation = executeActionAtLocation;
     this.setCurrentShip = setCurrentShip;
     this.registerLocation = registerLocation;
+    this.registerScanship = registerScanship;
+    this.getScanships = getScanships;
+    this.getCurrentShip = getCurrentShip;
+    this.abortFlight = abortFlight;
+    this.confirmFlight = confirmFlight;
 };
 
 var StarmapCanvas = function(starmap)
 {
     var _starmap = starmap;
+    var fieldSize = 25;
+
     var starmapElement;
+
     var target;
     var lastX=0;
     var lastY=0;
     var legendTargetsX;
     var legendTargetsY;
-    var fieldSize = 25;
+
     var dimensions;
     var mouseDownPosition = {x:0, y:0};
     var isMouseClick = true;
@@ -168,6 +214,7 @@ var StarmapCanvas = function(starmap)
         if(Math.sqrt(Math.pow(mouseDownPosition.x-newX, 2) + Math.pow(newY-mouseDownPosition.y, 2)) > 5) isMouseClick = false;
 
         setPosition(newX, newY);
+
         return false;
     }
 
@@ -225,9 +272,44 @@ var StarmapCanvas = function(starmap)
     }
 
     function stopDrag() {
-        stopUnHiding = true;
         drag = false;
         document.onmousemove = onmousemove;
+    }
+
+    function getCurrentViewRectangle()
+    {
+        var left = Math.floor(lastX/fieldSize);
+        var top = Math.floor(lastY/fieldSize);
+        var viewRectangle = {x:-left-2, y:-top-2, w:elementWidth()/fieldSize+4, h:elementHeight()/fieldSize+4}
+        return viewRectangle;
+    }
+
+    function renderFlightConfirmation(location, ship)
+    {
+        var mapAction = document.getElementById("kartenaktion");
+        mapAction.querySelector(".bestaetigung").style.visibility = "visible";
+        //document.getElementById("kartenaktion").style.display = "block";
+        var flightConfirmationText = mapAction.querySelector("#flightConfirmationText");
+        flightConfirmationText.textContent = `Soll das Schiff ${ship.name} wirklich nach ${location.x}/${location.y} (? Felder) fliegen?`;
+        marker.style.borderColor = "#feb626";
+    }
+
+    function derenderMapAction()
+    {
+        document.getElementById("kartenaktion").style.display = "none";
+        marker.style.borderColor = "blue"
+    }
+
+    function renderShipChosen(ship)
+    {
+        $("#starmapSectorPopup").dialog("close");
+        var mapAction = document.getElementById("kartenaktion");
+        mapAction.querySelector(".bestaetigung").style.visibility = "hidden";
+
+        var flightConfirmationText = mapAction.querySelector("#flightConfirmationText");
+        flightConfirmationText.textContent = `Bitte wähle die Zielposition für das Schiff ${ship.name} aus...`;
+
+        mapAction.style.display = "block";
     }
 
     this.setCoordinates = setCoordinates;
@@ -236,4 +318,107 @@ var StarmapCanvas = function(starmap)
     this.getLocationFromPixels = getLocationFromPixels;
     this.elementWidth = elementWidth;
     this.elementHeight = elementHeight;
+    this.getCurrentViewRectangle = getCurrentViewRectangle;
+    this.renderFlightConfirmation = renderFlightConfirmation;
+    this.derenderMapAction = derenderMapAction;
+    this.renderShipChosen  = renderShipChosen;
 }
+
+/*
+var StarmapClipper = function(starmap)
+{
+    var _starmap = starmap;
+    var target = document.getElementById("draggable");
+    var _starmapCanvas;
+    var fieldSize = 25;
+
+    var lastUnhide;
+    function unHidingOnMove(force)
+    {
+        return;
+
+        if(lastUnhide == null) lastUnhide = Date.now();
+        else if(Date.now() - lastUnhide < 50 && !force) return;
+
+        var viewRectangle = _starmapCanvas.getCurrentViewRectangle();
+
+        var scanships = _starmap.getScanships();
+        for(const [key, value] of Object.entries(scanships))
+        {
+            var isVisible = RectCircleColliding(value, viewRectangle);
+
+            if(value.maskNode == undefined)
+            {
+                value.maskNode = document.getElementById("scanship-" + key);
+                if(value.maskNode == null) continue;
+            }
+
+            if(!isVisible)
+            {
+                if(value.maskNode.style.visibility != "hidden")
+                {
+                    value.maskNode.style.visibility = "hidden";
+                }
+                else
+                {
+                    continue;
+                }
+            }
+            else
+            {
+                if(value.maskNode.style.visibility == "hidden")
+                {
+                    value.maskNode.style.visibility = "visible";
+                }
+                else
+                {
+                    continue;
+                }
+            }
+
+            if(value.fieldsNode == undefined)
+            {
+                value.fieldsNode = document.getElementById("scanfield-" + key);
+                if(value.fieldsNode == null) continue;
+            }
+
+            if(!isVisible)
+            {
+                if(value.fieldsNode.style.visibility != "hidden")
+                {
+                    value.fieldsNode.style.visibility = "hidden";
+                }
+            }
+            else
+            {
+                if(value.fieldsNode.style.visibility == "hidden")
+                {
+                    value.fieldsNode.style.visibility = "visible";
+                }
+            }
+        }
+    }
+
+    function RectCircleColliding(circle,rect){
+        var distX = Math.abs(circle.x - rect.x-rect.w/2);
+        var distY = Math.abs(circle.y - rect.y-rect.h/2);
+
+        if (distX > (rect.w/2 + circle.r)) { return false; }
+        if (distY > (rect.h/2 + circle.r)) { return false; }
+
+        if (distX <= (rect.w/2)) { return true; }
+        if (distY <= (rect.h/2)) { return true; }
+
+        var dx=distX-rect.w/2;
+        var dy=distY-rect.h/2;
+        return (dx*dx+dy*dy<=(circle.r*circle.r));
+    }
+
+    function setStarmapCanvas(starmapCanvas)
+    {
+        _starmapCanvas = starmapCanvas;
+    }
+
+    this.setStarmapCanvas = setStarmapCanvas;
+    this.unHidingOnMove = unHidingOnMove;
+}*/

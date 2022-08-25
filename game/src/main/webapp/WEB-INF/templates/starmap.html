@@ -66,6 +66,7 @@
             <a id="showSystemauswahl" title="System auswählen" onclick="$('#systemauswahl').dialog('open')" href="#"><img src="data/interface/impobjects.gif" alt="?"></a>
             <a id="gotoLocation" title="Zu Position springen" onclick="$('#goto-location').dialog('open');" href="#"><img src="data/interface/goto.svg" alt="?"></a>
             <a id="showStarmap" title="Bekannte Sternensysteme" ds-popup-control-open="starmapSystemOverviewPopup" href="#"><img src="data/interface/jumpnode.svg" alt="?"></a>
+            <a id="reloadStarmap" onclick="ReloadSystem()">R</a>
         </div>
     </div>
     <div id="legend-top-left" style="position:absolute;top:0;left:0;width:25px;height:25px;background-color:black;z-index:75;"></div>
@@ -89,14 +90,24 @@
         <div id="tiles" style="position:absolute;top:0px;left:0px;">
 
         </div>
-        <div id="scansectors" style="position:absolute;top:0px;left:0px;z-index:50;opacity:0.5;background-color:black;mix-blend-mode:darken;">
+        <div id="scansectors" style="position:absolute;top:0px;left:0px;opacity:0.5;background-color:black;mix-blend-mode:darken;">
         </div>
-        <div id="scannedSectors" style="position:absolute;top:0px;left:0px;right:0px;bottom:0px;z-index:51;">
+        <div id="scannedSectors" style="position:absolute;top:0px;left:0px;right:0px;bottom:0px;display:grid;">
 
         </div>
-        <div id="position-marker" style="position:absolute;display:none;left:0;top:0;width:25px;height:25px;border:1px solid blue; z-index:150; pointer-events:none;"></div>
+        <div id="position-marker" style="position:absolute;display:none;left:0;top:0;width:25px;height:25px;border:1px solid blue; pointer-events:none;"></div>
     </div>
     <div id="starmap-mouse-event-target" class="dragme" style="position: absolute; top: 0px; left: 0px; width: 100%; height: 100%; z-index: 100;"></div>
+</div>
+<div id="kartenaktion" style="right:25px;bottom:0px;position:absolute;font-size:75%;padding:2px 5px;color:#c7c7c7;border-radius:4px 4px 0 0;background:rgba(50,50,50,0.70);display:none;">
+    <!-- uiIf: fokusaktion.aktion=='flug' --><span ui-if="fokusaktion.aktion=='flug'" class="ng-scope">
+		<!-- uiIf: fokusaktion.ziel --><span id="flightConfirmationText" ui-if="fokusaktion.ziel" class="ng-scope ng-binding">
+
+		</span>
+    <!-- uiIf: !fokusaktion.ziel -->
+	</span>
+    <span class="abbruch" onclick="starmap.abortFlight()">Abbruch</span>
+    <!-- uiIf: fokusaktion.ziel --><span class="bestaetigung" onclick="starmap.confirmFlight()">Ja</span>
 </div>
 
 
@@ -108,8 +119,8 @@
                     <td colspan="2">
                         System<br>
                         <select name="sys" class="ng-pristine ng-valid">
-                            <option value="605" selected="selected">Eta Nebular (605) </option>
-                            <option value="80">Eta Nebular Gamma Prospect (609) </option>
+                            <option value="605" selected="selected">Eta Nebular (605)</option>
+                            <option value="612">Rho Carinae (612)</option>
                             <option value="81">Eta Nebular Delta Prospect (610) </option>
                             <option value="82">Eta Nebular Beta Prospect (611) </option>
                             <option value="83">Rho Carinae (612) </option>
@@ -193,7 +204,7 @@
         <!-- uiIf: sektor.brocken.length>0 -->
         <!-- uiIf: sektor.battles.length>0 -->
         <!-- uiIf: sektor.subraumspaltenCount>0 -->
-        <div id="sektoranzeige" class="ships">
+        <div id="sektoranzeige" class="ships" style="display: flex;flex-direction: column;">
 
         </div>
     </div>

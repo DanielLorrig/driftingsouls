@@ -20,10 +20,13 @@ package net.driftingsouls.ds2.server;
 
 import net.driftingsouls.ds2.server.entities.Nebel;
 import net.driftingsouls.ds2.server.map.PlayerStarmap;
+import net.driftingsouls.ds2.server.ships.MoveableShip;
 import org.jetbrains.annotations.NotNull;
 
 import javax.persistence.Embeddable;
 import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Eine Positionsklasse.
@@ -84,6 +87,34 @@ public final class Location implements Serializable, Locatable, Comparable<Locat
 	 */
 	public int getY() {
 		return y;
+	}
+
+	public int getXYDistance(Location otherLocation)
+	{
+		var distance = Math.max(Math.abs(otherLocation.getX()-this.x), Math.abs(otherLocation.getY()-this.y));
+		return distance;
+	}
+	public List<Location> getPathInSystem(Location destination)
+	{
+		var distance = getXYDistance(destination);
+		var result = new ArrayList<Location>(distance);
+
+		var newLocation = new Location(system, x, y);
+
+		for(int i=0;i<distance;i++){
+			// calculate direction and normalize
+			var deltaX = destination.getX() - newLocation.getX();
+			deltaX = (int)Math.signum(deltaX) * 1;
+			var deltaY = destination.getY() - newLocation.getY();
+			deltaY = (int)Math.signum(deltaY) * 1;
+
+
+			newLocation = new Location(newLocation.getSystem(), newLocation.getX() + deltaX, newLocation.getY() + deltaY);
+			result.add(newLocation);
+			// engine damage calculation needs to be calculated here if this method is used for forced flight (flying when heat>=100)
+		}
+
+		return result;
 	}
 
 	/**

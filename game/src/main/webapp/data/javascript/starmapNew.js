@@ -9,11 +9,16 @@ function LoadSystem(systemId)
     });
 }
 
-function LoadTestSystem()
+function ReloadSystem()
 {
-jQuery.getJSON(getUrl,{action:'get_system_data', system:80}, function(resp){renderBaseSystem(resp);});
-addScansectors(testScanranges);
-addScannedFields(testScannedFields);
+    var url = getUrl();
+    var system = starmap.getSystem();
+
+    if(system == null) return;
+
+    var systemId = system.system;
+    jQuery.getJSON(url, {action:'GET_SCANFIELDS', system:systemId}, function(resp){addScansectors(resp)});
+    jQuery.getJSON(url, {action:'GET_SCANNED_FIELDS', system:systemId}, function(resp){addScannedFields(resp)});
 }
 
 function renderBaseSystem(data)
@@ -105,7 +110,7 @@ function addScansectors(json) {
         container.appendChild(parseHTML(templateScansector(element)));
 
         var scanship = document.getElementById("scanship-" + element.shipId);
-        //starmap.registerScanship(element);
+        starmap.registerScanship(element);
     }
     container.style.display = display;
 }
@@ -113,7 +118,9 @@ function addScansectors(json) {
 function addScannedFields(json)
 {
     var container = document.getElementById("scannedSectors");
-    const display = container.style.display;
+    container.style.gridTemplateColumns = `repeat(${starmap.getSystem().width}, 25px)`;
+    container.style.gridTemplateRows = `repeat(${starmap.getSystem().height}, 25px)`;
+    const display = "grid";
     container.style.display = "none";
         while (container.firstChild) {
             container.removeChild(container.lastChild);
@@ -134,13 +141,13 @@ function addScannedFields(json)
                 {
                     var rockScanship = getRockScannerIndex(element.x, element.y);
                     scanfield = document.getElementById("scanfield-" + rockScanship.shipId);
-                    if(scanfield == null) container.appendChild(parseHTML('<div id="scanfield-' + rockScanship.shipId + '" style="position:absolute;top:0px;left:0px;display:block;"></div>'));
+                    if(scanfield == null) container.appendChild(parseHTML('<div id="scanfield-' + rockScanship.shipId + '" style="position:absolute;top:0px;left:0px;display:contents;"></div>'));
                     scanfield = document.getElementById("scanfield-" + rockScanship.shipId);
 
                     //starmap.registerScanship(rockScanship);
                 }
                 else{
-                    container.appendChild(parseHTML('<div id="scanfield-' + element.scanner + '" style="position:absolute;top:0px;left:0px;display:block;"></div>'));
+                    container.appendChild(parseHTML('<div id="scanfield-' + element.scanner + '" style="position:absolute;top:0px;left:0px;display:contents;"></div>'));
                     scanfield = document.getElementById("scanfield-" + element.scanner);
                 }
 
@@ -169,19 +176,131 @@ var starmap = new Starmap();
 function loadSectorData(x, y, scanship)
 {
     var system = starmap.getSystem();
-    jQuery.getJSON(DS.getUrl(),{FORMAT:'JSON', module:'map', action:'sector', sys:system.system, x:x, y:y, scanship:scanship, admin:system.admin}, function(resp){renderSectorData(resp)});
+
+    var header = document.getElementById("starmapSectorPopup").querySelector(".header");
+    header.textContent = `Lade Sektor ${system.system}:${x}/${y}`;
+
+    //starmap?action=GET_SECTOR_INFORMATION&system=sys&x=x&y=y&scanship=id
+    jQuery.getJSON(getUrl(),{action:'GET_SECTOR_INFORMATION', system:system.system, x:x, y:y, scanship:scanship, admin:system.admin}, function(resp){renderSectorData(resp)});
 }
 
 function renderSectorData(data)
 {
-    var container = document.getElementById("sektoranzeige");
-    container.innerHTML = "";
+    var container = document.getElementById("starmapSectorPopup");
+    var sektor = container.querySelector("#sektoranzeige");
+    //var container = document.getElementById("sektoranzeige");
+    sektor.innerHTML = "";
+
+    var header = container.querySelector(".header");
+    header.textContent = `Sektor ${data.system}:${data.x}/${data.y}`;
+
+
+    if(data.jumpnodes.length > 0) sektor.appendChild(parseHTML(templateJumpnodesFn(data.jumpnodes)))
+    if(data.bases.length > 0) sektor.appendChild(parseHTML(templateBasesFn(data.bases)));
+
+
 
     for(let index =0; index < data.users.length; index++)
     {
-        container.appendChild(parseHTML(templateUserFn(data.users[index])));
+        sektor.appendChild(parseHTML(templateUserFn(data.users[index])));
     }
 
-    container.style.display = "block";
+    var userToggles = document.querySelectorAll(".user-toggle-boundary");
+    for(var i=0;i<userToggles.length;i++)
+    {
+        var userToggle = userToggles[i];
+
+        let trigger = userToggle.querySelector(".user-toggle");
+        let switchable = userToggle.querySelector(".shipclasses");
+        let signum = userToggle.querySelector(".signum");
+
+        var eventFunction = () =>
+        {
+            if(switchable.style.display == "none")
+            {
+                switchable.style.removeProperty("display");
+                signum.textContent = "-";
+            }
+            else
+            {
+                switchable.style.display = "none";
+                signum.textContent = "+";
+            }
+        };
+
+        trigger.addEventListener("click", eventFunction.bind(null, switchable, signum) );
+    }
+
+    sektor.style.display = "flex";
     $("#starmapSectorPopup").dialog("open");
+    var userSectordatas = container.querySelectorAll(".user-sectordata");
+
+    for(var i=0;i<userSectordatas.length;i++)
+    {
+        var toggles = userSectordatas[i].querySelectorAll(".shiptypetoggle");
+        for(var j=0;j<toggles.length;j++)
+        {
+            var temp = toggles[j].querySelector("table");
+
+            var test = (element) =>
+            {
+                console.log(element);
+                if(element.style.display == "none")
+                {
+                    element.style.removeProperty("display");
+                }
+                else
+                {
+                    element.style.display = "none";
+                }
+            }
+
+            toggles[j].querySelector(".shiptype").addEventListener("click", test.bind(null, temp));
+
+            /*var ships = toggles[j].querySelectorAll(".can-fly");
+            AddFlyEventToShips(ships);*/
+        }
+    }
+
+    for(let i=0; i<data.users.length;i++)
+    {
+        for(let j=0;j<data.users[i].shiptypes.length;j++)
+        {
+            for(let k=0;k<data.users[i].shiptypes[j].ships.length;k++)
+            {
+                var ship = data.users[i].shiptypes[j].ships[k];
+                var shipNode = document.querySelector("#s-" + ship.id);
+                //console.log(shipNode);
+
+                var eventFunction = (ship) =>
+                {
+                    starmap.setCurrentShip(ship);
+                };
+
+                shipNode.addEventListener("click", eventFunction.bind(null, ship));
+            }
+        }
+    }
+    document.getElementById("sektoranzeige").style.display = "flex";
 }
+
+function AddFlyEventToShips(ships)
+{
+    /*for(let i=0;i<ships.length;i++)
+    {
+        var ship = ships[i];
+        var shipId = parseInt(ship.id.substring(2));
+
+        ship.addEventListener("click", function(){starmap.setCurrentShip(shipId);}.bind(null, shipId));
+    }*/
+}
+
+function toggleByDataTarget(element, display)
+{
+    if(display == null) display = "block";
+    var target = document.getElementById(element.dataset.toggleTarget);
+
+    target.style.display=display;
+}
+
+document.getElementById("sektoranzeige").style.flexDirection="column";
