@@ -169,7 +169,7 @@
 
 			PopupService.close($scope.dsPopupName);
 
-			$location.path("/map/" + sys + "/1/1");
+			$location.path("/starmap?sys=" + sys + "&x=1&y=1");
 			/*StarmapService.get().load(sys,1,1, {
 			 request : {
 			 admin : false
@@ -321,7 +321,7 @@
 
 			PopupService.close("systemSelection");
 
-			$location.path("/map/" + sys + "/" + x + "/" + y);
+			$location.path("/starmap?sys=" + sys + "&x=" + x + "&y=" + y);
 			$location.search("admin", adminSicht ? "true" : "false");
 			//StarmapService.load(sys,x,y, adminSicht);
 		}

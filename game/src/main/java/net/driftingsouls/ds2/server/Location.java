@@ -335,6 +335,34 @@ public final class Location implements Serializable, Locatable, Comparable<Locat
 		return text.toString();
 	}
 
+	public String getUrlParameter(){
+		Nebel.Typ nebulaType = Nebel.getNebula(this);
+
+		StringBuilder text = new StringBuilder(8);
+		text.append("sys=");
+		text.append(system);
+		text.append("&x=");
+
+		if( nebulaType == Nebel.Typ.LOW_EMP ) {
+			text.append(x / 10);
+			text.append("x&y=");
+			text.append(y / 10);
+			text.append('x');
+
+			return text.toString();
+		}
+		else if( (nebulaType == Nebel.Typ.MEDIUM_EMP) || (nebulaType == Nebel.Typ.STRONG_EMP) ) {
+			text.append("xx&y=xx");
+			return text.toString();
+		}
+		text.append(x);
+		text.append("&y=");
+		text.append(y);
+
+		return text.toString();
+		
+	}
+
 
 	@Override
 	public Location getLocation() {
