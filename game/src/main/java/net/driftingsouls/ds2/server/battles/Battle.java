@@ -1294,8 +1294,8 @@ public boolean hasFrontRow( int side) {
 			if( calledByUser ) {
 				try
 				{
-                    context.getResponse().getWriter().append("Du hast die Schlacht bei <a class='forschinfo' href='./client#/map/")
-						.append(this.getLocation().urlFragment()).append("'>")
+                    context.getResponse().getWriter().append("Du hast die Schlacht bei <a class='forschinfo' href='./starmap?")
+						.append(this.getLocation().getUrlParameter()).append("'>")
 						.append(this.getLocation().displayCoordinates(false))
 						.append("</a> gegen ");
                     context.getResponse().getWriter().append(Common._title(this.getCommanders()[this.enemySide].getName()));
@@ -1328,8 +1328,8 @@ public boolean hasFrontRow( int side) {
 			if( calledByUser ) {
 				try
 				{
-                    context.getResponse().getWriter().append("Du hast die Schlacht bei <a class='forschinfo' href='./client#/map/")
-						.append(this.getLocation().urlFragment()).append("'>")
+                    context.getResponse().getWriter().append("Du hast die Schlacht bei <a class='forschinfo' href='./starmap?")
+						.append(this.getLocation().getUrlParameter()).append("'>")
 						.append(this.getLocation().displayCoordinates(false))
 						.append("</a> gegen ");
                     context.getResponse().getWriter().append(Common._title(this.getCommanders()[this.enemySide].getName()));
@@ -1361,8 +1361,8 @@ public boolean hasFrontRow( int side) {
 			if( calledByUser ) {
 				try
 				{
-                    context.getResponse().getWriter().append("Du hast die Schlacht bei <a class='forschinfo' href='./client#/map/")
-						.append(this.getLocation().urlFragment()).append("'>")
+                    context.getResponse().getWriter().append("Du hast die Schlacht bei <a class='forschinfo' href='./starmap?")
+						.append(this.getLocation().getUrlParameter()).append("'>")
 						.append(this.getLocation().displayCoordinates(false))
 						.append("</a> gegen ");
                     context.getResponse().getWriter().append(Common._title(this.getCommanders()[this.enemySide].getName()));

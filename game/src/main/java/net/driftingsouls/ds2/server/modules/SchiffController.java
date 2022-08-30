@@ -760,7 +760,7 @@ public class SchiffController extends Controller
 				"ship.location.system", ship.getLocation().getSystem(),
 				"ship.name", Common._plaintitle(ship.getName()),
 				"ship.location", ship.getLocation().displayCoordinates(false),
-				"ship.location.url", ship.getLocation().urlFragment(),
+				"ship.location.url", ship.getLocation().getUrlParameter(),
 				"ship.type", ship.getType(),
 				"shiptype.picture", shiptype.getPicture(),
 				"shiptype.name", shiptype.getNickname(),

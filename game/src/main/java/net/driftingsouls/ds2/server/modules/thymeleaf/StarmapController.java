@@ -129,6 +129,29 @@ public class StarmapController implements DSController, PermissionResolver {
         }
 
         ctx.setVariable("starsystems", systemsViewModel);
+        int sys = 605;
+        int x = 1;
+        int y = 1;
+        try{
+            sys = Integer.parseInt(request.getParameter("system"));
+            x = Integer.parseInt(request.getParameter("x").replace('x', '0'));
+            y = Integer.parseInt(request.getParameter("y").replace('x', '0'));
+
+            if(x==0 & y==0 && sys > 0){
+                StarSystem s = (StarSystem) context.getDB().createQuery("from StarSystem where id =:sys").setInteger("sys", sys)
+                .uniqueResult();
+                x= s.getMapX()/2;
+                y= s.getMapY()/2;
+            }
+                
+
+        }catch(NumberFormatException e){
+
+        }
+        ctx.setVariable("system", sys);
+        ctx.setVariable("x", x);
+        ctx.setVariable("y", y);
+
         //ctx.setVariable("importantLocations", systemsViewModel);
     }
 

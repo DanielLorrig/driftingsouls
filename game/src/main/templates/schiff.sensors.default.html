@@ -41,10 +41,10 @@
 	</tr>
 	<tr><td class="Border">
 	{if global.goodscan}
-		<span style="font-weight:bold; color:#ff0505">Scan von <a style="color:inherit" href="./client#/map/{ship.location.url}">{ship.sensors.location}</a></span><br />
+		<span style="font-weight:bold; color:#ff0505">Scan von <a style="color:inherit" href="./starmap?{ship.location.url}">{ship.sensors.location}</a></span><br />
 	{/endif}
 	{if global.badscan}
-		<span style="font-weight:bold; color:#ff0505">Basen in <a style="color:inherit" href="./client#/map/{ship.location.url}">{ship.sensors.location}</a></span><br />
+		<span style="font-weight:bold; color:#ff0505">Basen in <a style="color:inherit" href="./starmap?{ship.location.url}">{ship.sensors.location}</a></span><br />
 	{/endif}
 
 	{if global.scan}

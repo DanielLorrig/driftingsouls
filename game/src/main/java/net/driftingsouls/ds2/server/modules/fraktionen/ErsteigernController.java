@@ -962,7 +962,7 @@ public class ErsteigernController extends Controller
 		{
 			t.setVar("gtuzwischenlager.name", Common._plaintitle(aposten.getName()),
 					"gtuzwischenlager.location", aposten.getLocation().displayCoordinates(true),
-					"gtuzwischenlager.location.url", aposten.getLocation().urlFragment());
+					"gtuzwischenlager.location.url", aposten.getLocation().getUrlParameter());
 
 			t.parse("gtuzwischenlager.list", "gtuzwischenlager.listitem", true);
 		}

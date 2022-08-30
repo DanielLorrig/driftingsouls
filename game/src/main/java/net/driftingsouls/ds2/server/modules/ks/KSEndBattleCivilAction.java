@@ -72,8 +72,8 @@ public class KSEndBattleCivilAction extends BasicKSAction {
 		Context context = ContextMap.getContext();
 		User user = (User)context.getActiveUser();
 		
-		context.getResponse().getWriter().append("Du hast die Schlacht bei <a class='forschinfo' href='./client#/map/")
-						.append(battle.getLocation().urlFragment()).append("'>")
+		context.getResponse().getWriter().append("Du hast die Schlacht bei <a class='forschinfo' href='./starmap?")
+						.append(battle.getLocation().getUrlParameter()).append("'>")
 						.append(battle.getLocation().displayCoordinates(false))
 						.append("</a> gewonnen.");
 
