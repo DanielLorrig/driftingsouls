@@ -65,7 +65,7 @@ var Starmap = function(){
     {
         //http://localhost:8080/ds/ds?FORMAT=JSON&module=schiffAjax&action=fliegeSchiff&schiff=1857304&x=31&y=33
         jQuery.getJSON(DS.getUrl(),{FORMAT:'JSON', module:'schiffAjax', action:'fliegeSchiff', schiff:flight.shipId, x:flight.location.x, y:flight.location.y})
-        .done(function(resp){ReloadSystem();});
+        .done(function(resp){ReloadSystem();RenderLog(resp);});
         //jQuery.getJSON(DS.getUrl(),{FORMAT:'JSON', module:'schiffAjax', action:'fliegeSchiff', schiff:flight.shipId, x:flight.location.x, y:flight.location.y}, function(resp){ReloadSystem();});
         setCurrentShip(null);
         starmapCanvas.derenderMapAction();
@@ -79,6 +79,33 @@ var Starmap = function(){
     function getScanships()
     {
         return scanships;
+    }
+
+    function loadImpObjects()
+    {
+        jQuery.getJSON(DS.getUrl(),{FORMAT:'JSON', module:'impobjects', action:'json', system:system.system})
+        .done(function(resp){
+            let container = document.querySelector("#goto-location-form .bekannteObjekte");
+            container.innerHTML = "";
+            container.appendChild(parseHTML(templateKnownPlaces(resp)));
+
+            let destinations = document.querySelectorAll(".single-goto-location.clickable");
+
+            for(let i=0;i<destinations.length;i++)
+            {
+                let destination = destinations[i];
+                var listElement = destination.closest("li");
+                let x = listElement.querySelector("[name=x]").value;
+                let y = listElement.querySelector("[name=y]").value;
+
+                destination.addEventListener("click", function(){
+                    starmap.setCoordinates(x, y);
+                }.bind(null, x, y));
+            }
+
+            $('#goto-location').dialog('open');
+        });
+
     }
 
     this.setSystem = setSystem;
@@ -98,6 +125,7 @@ var Starmap = function(){
     this.getCurrentShip = getCurrentShip;
     this.abortFlight = abortFlight;
     this.confirmFlight = confirmFlight;
+    this.loadImpObjects = loadImpObjects;
 };
 
 var StarmapCanvas = function(starmap)
@@ -166,7 +194,17 @@ var StarmapCanvas = function(starmap)
         }
     });
 
+    document.body.addEventListener("touchstart", function (e) {
+            if (e.target &&
+                e.target.classList.contains("dragme")) {
+                startDrag(e);
+            }
+        });
+
     document.onmouseup = stopDrag;
+    document.addEventListener("touchend", stopDrag);
+
+    document.getElementById("draggable").style.touchAction = 'none';
 
 
     function startDrag(e) {
@@ -174,15 +212,27 @@ var StarmapCanvas = function(starmap)
         if (!e) {
             var e = window.event;
         }
-
         // IE uses srcElement, others use target
 
         if (target.className != 'dragme') {
             return
         };
         // calculate event X, Y coordinates
-        offsetX = e.clientX;
-        offsetY = e.clientY;
+
+        offsetX = 0;
+        offsetY = 0;
+
+        if(e.type == "touchstart")
+        {
+            offsetX = e.touches[0].clientX;
+            offsetY = e.touches[0].clientY;
+        }
+        else
+        {
+            offsetX = e.clientX;
+            offsetY = e.clientY;
+        }
+
 
         mouseDownPosition.x = lastX;
         mouseDownPosition.y = lastY;
@@ -194,9 +244,12 @@ var StarmapCanvas = function(starmap)
 
         // move div element
         onmousemove = document.onmousemove;
+        ontouchmove = document.ontouchmove
         document.onmousemove = dragDiv;
+        document.addEventListener("touchmove", function(e){dragDiv(e);});
     }
     var onmousemove;
+    var ontouchmove;
 
     function dragDiv(e) {
         if (!drag) {
@@ -208,11 +261,22 @@ var StarmapCanvas = function(starmap)
 
         // move div element
 
-        var newX = coordX + e.clientX - offsetX
-        var newY = coordY + e.clientY - offsetY;
+        var newX = 0;
+        var newY = 0;
+
+        if(e.type == "touchmove")
+        {
+            newX = coordX + e.touches[0].clientX - offsetX;
+            newY = coordY + e.touches[0].clientY - offsetY;
+        }
+        else
+        {
+            newX = coordX + e.clientX - offsetX;
+            newY = coordY + e.clientY - offsetY;
+        }
 
         if(Math.sqrt(Math.pow(mouseDownPosition.x-newX, 2) + Math.pow(newY-mouseDownPosition.y, 2)) > 5) isMouseClick = false;
-
+        //isMouseClick = false;
         setPosition(newX, newY);
 
         return false;
@@ -274,6 +338,7 @@ var StarmapCanvas = function(starmap)
     function stopDrag() {
         drag = false;
         document.onmousemove = onmousemove;
+        document.removeEventListener("touchmove", function(e){dragDiv(e);});
     }
 
     function getCurrentViewRectangle()
@@ -290,7 +355,8 @@ var StarmapCanvas = function(starmap)
         mapAction.querySelector(".bestaetigung").style.visibility = "visible";
         //document.getElementById("kartenaktion").style.display = "block";
         var flightConfirmationText = mapAction.querySelector("#flightConfirmationText");
-        flightConfirmationText.textContent = `Soll das Schiff ${ship.name} wirklich nach ${location.x}/${location.y} (? Felder) fliegen?`;
+        var numberOfFields = Math.max(Math.abs(location.x-ship.x), Math.abs(location.y-ship.y))
+        flightConfirmationText.textContent = `Soll das Schiff ${ship.name} wirklich nach ${location.x}/${location.y} (${numberOfFields} ${numberOfFields == 1 ? "Feld" : "Felder"}) fliegen?`;
         marker.style.borderColor = "#feb626";
     }
 
@@ -323,102 +389,3 @@ var StarmapCanvas = function(starmap)
     this.derenderMapAction = derenderMapAction;
     this.renderShipChosen  = renderShipChosen;
 }
-
-/*
-var StarmapClipper = function(starmap)
-{
-    var _starmap = starmap;
-    var target = document.getElementById("draggable");
-    var _starmapCanvas;
-    var fieldSize = 25;
-
-    var lastUnhide;
-    function unHidingOnMove(force)
-    {
-        return;
-
-        if(lastUnhide == null) lastUnhide = Date.now();
-        else if(Date.now() - lastUnhide < 50 && !force) return;
-
-        var viewRectangle = _starmapCanvas.getCurrentViewRectangle();
-
-        var scanships = _starmap.getScanships();
-        for(const [key, value] of Object.entries(scanships))
-        {
-            var isVisible = RectCircleColliding(value, viewRectangle);
-
-            if(value.maskNode == undefined)
-            {
-                value.maskNode = document.getElementById("scanship-" + key);
-                if(value.maskNode == null) continue;
-            }
-
-            if(!isVisible)
-            {
-                if(value.maskNode.style.visibility != "hidden")
-                {
-                    value.maskNode.style.visibility = "hidden";
-                }
-                else
-                {
-                    continue;
-                }
-            }
-            else
-            {
-                if(value.maskNode.style.visibility == "hidden")
-                {
-                    value.maskNode.style.visibility = "visible";
-                }
-                else
-                {
-                    continue;
-                }
-            }
-
-            if(value.fieldsNode == undefined)
-            {
-                value.fieldsNode = document.getElementById("scanfield-" + key);
-                if(value.fieldsNode == null) continue;
-            }
-
-            if(!isVisible)
-            {
-                if(value.fieldsNode.style.visibility != "hidden")
-                {
-                    value.fieldsNode.style.visibility = "hidden";
-                }
-            }
-            else
-            {
-                if(value.fieldsNode.style.visibility == "hidden")
-                {
-                    value.fieldsNode.style.visibility = "visible";
-                }
-            }
-        }
-    }
-
-    function RectCircleColliding(circle,rect){
-        var distX = Math.abs(circle.x - rect.x-rect.w/2);
-        var distY = Math.abs(circle.y - rect.y-rect.h/2);
-
-        if (distX > (rect.w/2 + circle.r)) { return false; }
-        if (distY > (rect.h/2 + circle.r)) { return false; }
-
-        if (distX <= (rect.w/2)) { return true; }
-        if (distY <= (rect.h/2)) { return true; }
-
-        var dx=distX-rect.w/2;
-        var dy=distY-rect.h/2;
-        return (dx*dx+dy*dy<=(circle.r*circle.r));
-    }
-
-    function setStarmapCanvas(starmapCanvas)
-    {
-        _starmapCanvas = starmapCanvas;
-    }
-
-    this.setStarmapCanvas = setStarmapCanvas;
-    this.unHidingOnMove = unHidingOnMove;
-}*/

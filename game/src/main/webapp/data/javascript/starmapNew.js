@@ -1,12 +1,15 @@
-function LoadSystem(systemId)
+function LoadSystem(formdata)
 {
+    let systemId = formdata.get('system');
     var url = getUrl();
+    gotoLocation = {x:formdata.get('x'), y:formdata.get('y')};
     jQuery.getJSON(url,{action:'get_system_data', system:systemId}, function(resp)
     {
         renderBaseSystem(resp);
-        jQuery.getJSON(url, {action:'GET_SCANFIELDS', system:systemId}, function(resp){addScansectors(resp)});
-        jQuery.getJSON(url, {action:'GET_SCANNED_FIELDS', system:systemId}, function(resp){addScannedFields(resp)});
+        jQuery.getJSON(url, {action:'GET_SCANFIELDS', system:systemId}, function(resp){addScansectors(resp);derenderLoader();});
+        jQuery.getJSON(url, {action:'GET_SCANNED_FIELDS', system:systemId}, function(resp){addScannedFields(resp);derenderLoader();});
     });
+
 }
 
 function ReloadSystem()
@@ -14,11 +17,29 @@ function ReloadSystem()
     var url = getUrl();
     var system = starmap.getSystem();
 
+    counter = 0;
+    $("#starmaploader").dialog("open");
+
     if(system == null) return;
 
     var systemId = system.system;
-    jQuery.getJSON(url, {action:'GET_SCANFIELDS', system:systemId}, function(resp){addScansectors(resp)});
-    jQuery.getJSON(url, {action:'GET_SCANNED_FIELDS', system:systemId}, function(resp){addScannedFields(resp)});
+    jQuery.getJSON(url, {action:'GET_SCANFIELDS', system:systemId}, function(resp){addScansectors(resp);derenderLoader();});
+    jQuery.getJSON(url, {action:'GET_SCANNED_FIELDS', system:systemId}, function(resp){addScannedFields(resp); derenderLoader();});
+
+
+}
+
+var counter = 0;
+var gotoLocation = null;
+function derenderLoader()
+{
+    counter++;
+    if(counter == 2) $("#starmaploader").dialog("close");
+    if(gotoLocation != null)
+    {
+        starmap.setCoordinates(gotoLocation.x, gotoLocation.y);
+        gotoLocation = null;
+    }
 }
 
 function renderBaseSystem(data)
@@ -181,11 +202,14 @@ function loadSectorData(x, y, scanship)
     header.textContent = `Lade Sektor ${system.system}:${x}/${y}`;
 
     //starmap?action=GET_SECTOR_INFORMATION&system=sys&x=x&y=y&scanship=id
-    jQuery.getJSON(getUrl(),{action:'GET_SECTOR_INFORMATION', system:system.system, x:x, y:y, scanship:scanship, admin:system.admin}, function(resp){renderSectorData(resp)});
+    $("#starmaploader").dialog("open");
+    $("#starmapSectorPopup").dialog("close");
+    jQuery.getJSON(getUrl(),{action:'GET_SECTOR_INFORMATION', system:system.system, x:x, y:y, scanship:scanship, admin:system.admin}, function(resp){renderSectorData(resp); $("#starmaploader").dialog("close");});
 }
 
 function renderSectorData(data)
 {
+
     var container = document.getElementById("starmapSectorPopup");
     var sektor = container.querySelector("#sektoranzeige");
     //var container = document.getElementById("sektoranzeige");
@@ -194,10 +218,12 @@ function renderSectorData(data)
     var header = container.querySelector(".header");
     header.textContent = `Sektor ${data.system}:${data.x}/${data.y}`;
 
-
-    if(data.jumpnodes.length > 0) sektor.appendChild(parseHTML(templateJumpnodesFn(data.jumpnodes)))
+    if(data.roterAlarm > 0) sektor.appendChild(parseHTML(templateAlarmRedFn(data.roterAlarm)));
+    if(data.nebel != undefined) sektor.appendChild(parseHTML(templateNebulaFn(data.nebel)));
+    if(data.jumpnodes.length > 0) sektor.appendChild(parseHTML(templateJumpnodesFn(data.jumpnodes)));
     if(data.bases.length > 0) sektor.appendChild(parseHTML(templateBasesFn(data.bases)));
-
+    if(data.battles.length>0) sektor.appendChild(parseHTML(templateBattlesFn(data.battles)));
+    if(data.subraumspaltenCount.length>0) sektor.appendChild(parseHTML(templateSubraumspaltenFn(data.subraumspaltenCount)));
 
 
     for(let index =0; index < data.users.length; index++)
@@ -235,16 +261,8 @@ function renderSectorData(data)
     $("#starmapSectorPopup").dialog("open");
     var userSectordatas = container.querySelectorAll(".user-sectordata");
 
-    for(var i=0;i<userSectordatas.length;i++)
-    {
-        var toggles = userSectordatas[i].querySelectorAll(".shiptypetoggle");
-        for(var j=0;j<toggles.length;j++)
-        {
-            var temp = toggles[j].querySelector("table");
-
-            var test = (element) =>
+    var test = (element) =>
             {
-                console.log(element);
                 if(element.style.display == "none")
                 {
                     element.style.removeProperty("display");
@@ -254,6 +272,15 @@ function renderSectorData(data)
                     element.style.display = "none";
                 }
             }
+
+    for(var i=0;i<userSectordatas.length;i++)
+    {
+        var toggles = userSectordatas[i].querySelectorAll(".shiptypetoggle");
+        for(var j=0;j<toggles.length;j++)
+        {
+            var temp = toggles[j].querySelector("table");
+
+
 
             toggles[j].querySelector(".shiptype").addEventListener("click", test.bind(null, temp));
 
@@ -268,8 +295,13 @@ function renderSectorData(data)
         {
             for(let k=0;k<data.users[i].shiptypes[j].ships.length;k++)
             {
-                var ship = data.users[i].shiptypes[j].ships[k];
+                let ship = data.users[i].shiptypes[j].ships[k];
+                if(!ship.isOwner) continue;
+
+                var shiprow = document.querySelector("#user-" + data.users[i].id );
+
                 var shipNode = document.querySelector("#s-" + ship.id);
+                if(shipNode == null) continue;
                 //console.log(shipNode);
 
                 var eventFunction = (ship) =>
@@ -278,9 +310,35 @@ function renderSectorData(data)
                 };
 
                 shipNode.addEventListener("click", eventFunction.bind(null, ship));
+
+                if(ship.landedShips.length > 0)
+                {
+                    var temp = document.getElementById("landed-on-" + ship.id);
+                    console.log("#landed-on-" + ship.id);
+                    document.getElementById("landed-toggle-" + ship.id).addEventListener("click", test.bind(null, temp));
+                }
+
+                var scanrangeToggleNode = shipNode.closest(".scanner");
+                scanrangeToggleNode.addEventListener("mouseover", function(){showScanrange(ship);}.bind(null, ship));
+                scanrangeToggleNode.addEventListener("mouseout", function(){removeScanrange();});
+
             }
         }
     }
+
+    var shiptypeLinks = document.querySelectorAll(".shiptype-bind");
+
+    for(let i=0;i<shiptypeLinks.length; i++)
+    {
+        let shiptypelink = shiptypeLinks[i];
+        let typeId = shiptypelink.getAttribute("data-click");
+
+        shiptypelink.addEventListener("click", function(){
+            getShiptypeData(typeId)
+         }.bind(null, typeId));
+    }
+
+    $("#starmaploader").dialog("close");
     document.getElementById("sektoranzeige").style.display = "flex";
 }
 
@@ -304,3 +362,44 @@ function toggleByDataTarget(element, display)
 }
 
 document.getElementById("sektoranzeige").style.flexDirection="column";
+
+function RenderLog(message)
+{
+    var logContainer = document.querySelector("#kartenaktionslog .logentries");
+
+    var message = `<div class="logentry ng-scope" >
+                        ${message.log}
+                     </div>`;
+
+    logContainer.appendChild(parseHTML(message));
+}
+
+function getShiptypeData(type)
+{
+    console.log(type);
+    ShiptypeBox.show(type);
+    document.getElementById("shiptypeBox").closest(".ui-dialog").style.zIndex = 300;
+}
+
+var highlightScanrange;
+function showScanrange(ship)
+{
+    console.log(ship);
+    var marker = document.getElementById("scanrange-marker");
+    highlightScanrange = "scanrange" + (ship.sensorRange+1);
+
+    marker.classList.add(highlightScanrange);
+
+    marker.style.top = ((ship.y -1) * 25) + 12.5 + "px";
+    marker.style.left = ((ship.x - 1) *25) +12.5 +"px";
+
+    marker.style.backgroundColor = "rgba(0, 255, 0, 0.15)";
+    marker.style.removeProperty("display");
+}
+
+function removeScanrange()
+{
+    var marker = document.getElementById("scanrange-marker");
+    marker.classList.remove(highlightScanrange);
+    marker.style.display = "none";
+}

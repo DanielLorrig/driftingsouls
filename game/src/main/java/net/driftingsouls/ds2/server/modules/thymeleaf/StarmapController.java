@@ -1,38 +1,28 @@
 package net.driftingsouls.ds2.server.modules.thymeleaf;
 
 import com.google.gson.Gson;
-import net.driftingsouls.ds2.server.ContextCommon;
 import net.driftingsouls.ds2.server.Location;
 import net.driftingsouls.ds2.server.WellKnownAdminPermission;
 import net.driftingsouls.ds2.server.WellKnownPermission;
-import net.driftingsouls.ds2.server.config.Medals;
-import net.driftingsouls.ds2.server.config.Rang;
+import net.driftingsouls.ds2.server.config.Rassen;
 import net.driftingsouls.ds2.server.config.StarSystem;
-import net.driftingsouls.ds2.server.entities.ComNetChannel;
-import net.driftingsouls.ds2.server.entities.ComNetEntry;
-import net.driftingsouls.ds2.server.entities.ComNetVisit;
+import net.driftingsouls.ds2.server.entities.Nebel;
 import net.driftingsouls.ds2.server.entities.User;
-import net.driftingsouls.ds2.server.entities.ally.Ally;
-import net.driftingsouls.ds2.server.framework.*;
-import net.driftingsouls.ds2.server.framework.bbcode.Smilie;
+import net.driftingsouls.ds2.server.framework.Common;
+import net.driftingsouls.ds2.server.framework.Context;
+import net.driftingsouls.ds2.server.framework.ContextMap;
+import net.driftingsouls.ds2.server.framework.PermissionDescriptor;
+import net.driftingsouls.ds2.server.framework.PermissionResolver;
+import net.driftingsouls.ds2.server.framework.db.DBUtil;
 import net.driftingsouls.ds2.server.framework.pipeline.controllers.ValidierungException;
 import net.driftingsouls.ds2.server.map.*;
 import net.driftingsouls.ds2.server.modules.MapController;
-import net.driftingsouls.ds2.server.services.ComNetService;
-import net.driftingsouls.ds2.server.ships.Ship;
-import net.driftingsouls.ds2.server.ships.ShipType;
-import net.driftingsouls.ds2.server.ships.ShipTypeData;
-import net.driftingsouls.ds2.server.ships.ShipTypeFlag;
-import net.driftingsouls.ds2.server.bases.Base;
+import net.driftingsouls.ds2.server.modules.viewmodels.AllyViewModel;
 import net.driftingsouls.ds2.server.modules.viewmodels.ShipFleetViewModel;
 import net.driftingsouls.ds2.server.modules.viewmodels.UserViewModel;
-import net.driftingsouls.ds2.server.modules.viewmodels.AllyViewModel;
-import net.driftingsouls.ds2.server.entities.JumpNode;
-import net.driftingsouls.ds2.server.config.Rassen;
-import net.driftingsouls.ds2.server.entities.Nebel;
-import net.driftingsouls.ds2.server.battles.Battle;
-import org.hibernate.Session;
-
+import net.driftingsouls.ds2.server.repositories.ItemRepository;
+import net.driftingsouls.ds2.server.repositories.ShipsRepository;
+import net.driftingsouls.ds2.server.repositories.StarsystemRepository;
 import org.json.JSONObject;
 import org.springframework.http.HttpHeaders;
 import org.thymeleaf.ITemplateEngine;
@@ -42,13 +32,16 @@ import javax.servlet.ServletContext;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.sql.SQLException;
 import java.util.*;
 
+import static net.driftingsouls.ds2.server.entities.jooq.tables.BattlesShips.BATTLES_SHIPS;
+import static net.driftingsouls.ds2.server.entities.jooq.tables.Ships.SHIPS;
+import static org.jooq.impl.DSL.count;
+
 /**
- * Das ComNet - Alle Funktionalitaeten des ComNets befinden sich in
- * dieser Klasse.
- *
- * @author Gregor Fuhs
+ * Die Sternenkarte.
  */
 public class StarmapController implements DSController, PermissionResolver {
     private Context context;
@@ -66,6 +59,8 @@ public class StarmapController implements DSController, PermissionResolver {
         GET_SECTOR_INFORMATION,
         DEFAULT
     }
+
+    private User user;
 
     /**
      * Erzeugt die StarMapSeite (/starmap).
@@ -91,23 +86,24 @@ public class StarmapController implements DSController, PermissionResolver {
         try {
             system = Integer.parseInt(request.getParameter("system"));
         }catch(Exception e){
+            //TODO: Fall back to system where user has most of their asteroids
             system = 605;
         }
 
         switch(action){
             case GET_SYSTEM_DATA:
-                systemData(system, ctx, request, response);
+                systemData(system, response);
                 break;
             case GET_SCANFIELDS:
-                scanfields(system, ctx, request, response);
+                scanFields(system, response);
                 break;
             case GET_SCANNED_FIELDS:
-                scannedFields(system, ctx, request, response);
+                scannedFields(system, response);
                 break;
             case GET_SECTOR_INFORMATION:
-                sectorInformation(system, ctx, request, response);
+                sectorInformation(system, request, response);
                 break;
-            default:
+            case DEFAULT:
                 defaultAction(ctx, request);
                 templateEngine.process("starmap", ctx, response.getWriter());
                 break;
@@ -121,19 +117,26 @@ public class StarmapController implements DSController, PermissionResolver {
      */
     private void defaultAction(WebContext ctx, HttpServletRequest request){
 
-        User user = (User) context.getActiveUser();
+        user = (User) context.getActiveUser();
 
+        List<StarsystemsSelectList> systemsViewModel = new ArrayList<>();
 
+        var starsystems = StarsystemRepository.getInstance().getStarsystemsData();
+
+        for (var starsystem: starsystems) {
+            if(!starsystem.isVisibleFor(user)) continue;
+            systemsViewModel.add(new StarsystemsSelectList(starsystem.id, starsystem.name + " ("+ starsystem.id +")"));
+        }
+
+        ctx.setVariable("starsystems", systemsViewModel);
+        //ctx.setVariable("importantLocations", systemsViewModel);
     }
 
-    private void systemData(int systemId, WebContext ctx, HttpServletRequest request, HttpServletResponse response) throws IOException
+    private void systemData(int systemId, HttpServletResponse response) throws IOException
     {
         prepareResponseForJSON(response);
         org.hibernate.Session db = context.getDB();
-        User user = (User) context.getActiveUser();
         boolean admin = false;
-
-        //var map = new PlayerStarmap(user, systemId, null);
 
         StarSystem sys = (StarSystem) db.get(StarSystem.class, systemId);
         validiereSystem(sys);
@@ -148,34 +151,24 @@ public class StarmapController implements DSController, PermissionResolver {
         response.flushBuffer(); // marks response as committed -- if we don't do this the request will go through normally!
     }
 
-    private void scanfields(int systemId, WebContext ctx, HttpServletRequest request, HttpServletResponse response) throws IOException
+    private void scanFields(int systemId, HttpServletResponse response) throws IOException
     {
         prepareResponseForJSON(response);
         org.hibernate.Session db = context.getDB();
         User user = (User) context.getActiveUser();
         boolean admin = false;
 
-        //var map = new PlayerStarmap(user, systemId, null);
-
         StarSystem sys = (StarSystem) db.get(StarSystem.class, systemId);
         validiereSystem(sys);
 
         MapController.MapViewModel jsonData = new MapController.MapViewModel();
-
-
 
         jsonData.system = new MapController.MapViewModel.SystemViewModel();
         jsonData.system.id = sys.getID();
         jsonData.system.width = sys.getWidth();
         jsonData.system.height = sys.getHeight();
 
-        int xStart = 1;
-        int yStart = 1;
-        int xEnd = sys.getWidth();
-        int yEnd = sys.getHeight();
-
         PublicStarmap content;
-        var mapArea = new MapArea(xStart, xEnd - xStart, yStart, yEnd - yStart);
         if (admin && hasPermission(WellKnownAdminPermission.STARMAP_VIEW))
         {
             content = new AdminStarmap(sys.getID(), user);
@@ -185,24 +178,17 @@ public class StarmapController implements DSController, PermissionResolver {
             content = new PlayerStarmap(user, sys.getID());
         }
 
-        // Das Anzeigen sollte keine DB-Aenderungen verursacht haben
-        db.clear();
-
         var json = new Gson().toJson(content.getScanSectorData());
-        response.getWriter().write(json.toString());
+        response.getWriter().write(json);
         response.flushBuffer(); // marks response as committed -- if we don't do this the request will go through normally!
-
-        // return json;
     }
 
-    private void scannedFields(int systemId, WebContext ctx, HttpServletRequest request, HttpServletResponse response) throws IOException
+    private void scannedFields(int systemId, HttpServletResponse response) throws IOException
     {
         prepareResponseForJSON(response);
         org.hibernate.Session db = context.getDB();
         User user = (User) context.getActiveUser();
         boolean admin = false;
-
-        //var map = new PlayerStarmap(user, systemId, null);
 
         StarSystem sys = (StarSystem) db.get(StarSystem.class, systemId);
         validiereSystem(sys);
@@ -261,26 +247,20 @@ public class StarmapController implements DSController, PermissionResolver {
         // return json;
     }
 
-    public void sectorInformation(int systemId, WebContext ctx, HttpServletRequest request, HttpServletResponse response) throws IOException
+    public void sectorInformation(int systemId, HttpServletRequest request, HttpServletResponse response) throws IOException
 	{
         prepareResponseForJSON(response);
         org.hibernate.Session db = context.getDB();
         User user = (User) context.getActiveUser();
         boolean admin = false;
 
-        //var map = new PlayerStarmap(user, systemId, null);
-
         StarSystem sys = (StarSystem) db.get(StarSystem.class, systemId);
         validiereSystem(sys);
-        int x = -1;
-        int y = -1;
-        int scanshipid = -1;
-        Ship scanship = null;
+        int x;
+        int y;
         try {
             x = Integer.parseInt(request.getParameter("x"));
             y = Integer.parseInt(request.getParameter("y"));
-            scanshipid = Integer.parseInt(request.getParameter("scanship"));
-            scanship = Ship.getShipById(scanshipid);
         }catch(Exception e){
             return;
         }
@@ -295,79 +275,64 @@ public class StarmapController implements DSController, PermissionResolver {
 		FieldView field;
 		if (admin && hasPermission(WellKnownAdminPermission.STARMAP_VIEW))
 		{
-			field = new AdminFieldView(db, loc);
+			field = new AdminFieldView(db, loc, new AdminStarmap(sys.getID(), user));
 		}
 		else
 		{
-			field = new PlayerFieldView(db, user, loc, scanship);
+			field = new PlayerFieldView(user, loc, new PlayerStarmap(user, sys.getID()), context.getEM());
 		}
 
-		jsonData.users.addAll(exportSectorShips(field, user));
+        var ships = field.getShips();
+		jsonData.users.addAll(exportSectorShips(field, user, ships));
 
-		for (Base base : field.getBases())
+        var stationaryObjects = new ArrayList<>(field.getBases());
+        stationaryObjects.addAll(field.getBrocken());
+		for (StationaryObjectData base : stationaryObjects)
 		{
 			MapController.SectorViewModel.BaseViewModel baseObj = new MapController.SectorViewModel.BaseViewModel();
-			baseObj.id = base.getId();
-			baseObj.name = base.getName();
-			baseObj.username = Common._title(base.getOwner().getName());
-			baseObj.image = base.getKlasse().getLargeImage();
-			baseObj.klasse = base.getKlasse().getId();
-			baseObj.typ = base.getKlasse().getName();
-			baseObj.eigene = base.getOwner().getId() == user.getId();
+			baseObj.id = base.id;
+			baseObj.name = base.name;
+			baseObj.username = Common._title(base.ownerName);
+			baseObj.image = base.image;
+			baseObj.klasse = base.typeId;
+			baseObj.typ = base.typeName;
+			baseObj.eigene = base.ownerId == user.getId();
 
 			jsonData.bases.add(baseObj);
 		}
-		for (Ship brocken : field.getBrocken())
-		{
-			MapController.SectorViewModel.BaseViewModel brockenObj = new MapController.SectorViewModel.BaseViewModel();
-			brockenObj.id = brocken.getId();
-			brockenObj.name = brocken.getName();
-			brockenObj.username = Common._title(brocken.getOwner().getName());
-			brockenObj.image = brocken.getTypeData().getPicture(); //getKlasse().getLargeImage();
-			brockenObj.klasse = brocken.getTypeData().getTypeId();	//getKlasse().getId();
-			brockenObj.typ = brocken.getTypeData().getNickname();  //getKlasse().getName();
-			brockenObj.eigene = brocken.getOwner().getId() == user.getId();
 
-			jsonData.bases.add(brockenObj);
-		}
-
-		for (JumpNode jumpNode : field.getJumpNodes())
+		for (NodeData jumpNode : field.getJumpNodes())
 		{
 			MapController.SectorViewModel.JumpNodeViewModel jnObj = new MapController.SectorViewModel.JumpNodeViewModel();
-			jnObj.id = jumpNode.getId();
-			jnObj.name = jumpNode.getName();
-			jnObj.blocked = jumpNode.isGcpColonistBlock() && Rassen.get().rasse(user.getRace()).isMemberIn(0);
+			jnObj.id = jumpNode.id;
+			jnObj.name = jumpNode.name;
+			jnObj.blocked = jumpNode.blocked && Rassen.get().rasse(user.getRace()).isMemberIn(0);
 			jsonData.jumpnodes.add(jnObj);
 		}
 
-		Nebel nebel = field.getNebel();
+		Nebel.Typ nebel = field.getNebel();
 		if (nebel != null)
 		{
 			jsonData.nebel = new MapController.SectorViewModel.NebelViewModel();
-			jsonData.nebel.type = nebel.getType().getCode();
+			jsonData.nebel.type = nebel.getCode();
 			jsonData.nebel.image = nebel.getImage();
 		}
 
-		jsonData.battles.addAll(exportSectorBattles(db, field));
+        //TODO: Handle battle scanner
+		jsonData.battles.addAll(exportSectorBattles(field, false));
 
-		jsonData.subraumspaltenCount = field.getSubraumspalten().size();
+		jsonData.subraumspaltenCount = field.getJumpCount();
 		jsonData.roterAlarm = field.isRoterAlarm();
-
-        // Das Anzeigen sollte keine DB-Aenderungen verursacht haben
-        db.clear();
 
         var json = new Gson().toJson(jsonData);
         response.getWriter().write(json);
         response.flushBuffer(); // marks response as committed -- if we don't do this the request will go through normally!
-
-        // return json;
-
 	}
 
     public void prepareResponseForJSON(HttpServletResponse response){
         response.resetBuffer();
         response.setHeader(HttpHeaders.CONTENT_TYPE, "application/json");
-        response.setCharacterEncoding("UTF-8");
+        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
     }
 
     private MapController.MapViewModel.LocationViewModel createMapLocationViewModel(PublicStarmap content, Location position)
@@ -433,74 +398,66 @@ public class StarmapController implements DSController, PermissionResolver {
         }
     }
 
-    private List<MapController.SectorViewModel.UserWithShips> exportSectorShips(FieldView field, User user)
+    private List<MapController.SectorViewModel.UserWithShips> exportSectorShips(FieldView field, User user, Map<UserData, Map<net.driftingsouls.ds2.server.map.ShipTypeData, List<ShipData>>> ships)
 	{
 		List<MapController.SectorViewModel.UserWithShips> users = new ArrayList<>();
-		for (Map.Entry<User, Map<ShipType, List<Ship>>> owner : field.getShips().entrySet())
+        var allShipTypes = ShipsRepository.getShipTypesData();
+        //ShipsRepository.getShipTypes();
+		for (Map.Entry<UserData, Map<net.driftingsouls.ds2.server.map.ShipTypeData, List<ShipData>>> owner : ships.entrySet())
 		{
-			int count = 0;
-            MapController.SectorViewModel.UserWithShips jsonUser = new MapController.SectorViewModel.UserWithShips();
-			jsonUser.name = Common._text(owner.getKey().getName());
-			jsonUser.id = owner.getKey().getId();
-			jsonUser.race = owner.getKey().getRace();
+            var ownerInformation = owner.getKey();
+			MapController.SectorViewModel.UserWithShips jsonUser = new MapController.SectorViewModel.UserWithShips();
+			jsonUser.name = Common._text(ownerInformation.name);
+			jsonUser.id = ownerInformation.id;
+			jsonUser.race = ownerInformation.raceId;
 
-			boolean ownFleet = owner.getKey().getId() == context.getActiveUser().getId();
+			boolean ownFleet = ownerInformation.id == context.getActiveUser().getId();
 			jsonUser.eigener = ownFleet;
 
-			for (Map.Entry<ShipType, List<Ship>> shiptype : owner.getValue().entrySet())
+			for (Map.Entry<net.driftingsouls.ds2.server.map.ShipTypeData, List<ShipData>> shiptype : owner.getValue().entrySet())
 			{
+                var typeData = shiptype.getKey();
 				MapController.SectorViewModel.ShipTypeViewModel jsonShiptype = new MapController.SectorViewModel.ShipTypeViewModel();
-				jsonShiptype.id = shiptype.getKey().getId();
-				jsonShiptype.name = shiptype.getKey().getNickname();
-				jsonShiptype.picture = shiptype.getKey().getPicture();
-				jsonShiptype.size = shiptype.getKey().getSize();
+				jsonShiptype.id = typeData.id;
+				jsonShiptype.name = typeData.name;
+				jsonShiptype.picture = typeData.picture;
+				jsonShiptype.size = typeData.size;
 
-				for (Ship ship : shiptype.getValue())
+				for (ShipData ship : shiptype.getValue())
 				{
-					ShipTypeData typeData = ship.getTypeData();
 					MapController.SectorViewModel.ShipViewModel shipObj;
 					if (ownFleet)
 					{
-						MapController.SectorViewModel.OwnShipViewModel ownShip = new MapController.SectorViewModel.OwnShipViewModel();
-						ownShip.gelandet = ship.getLandedCount();
-						ownShip.maxGelandet = typeData.getJDocks();
-                        ownShip.x = field.getLocation().getX();
-                        ownShip.y = field.getLocation().getY();
-                        ownShip.isOwner = true;
+						var ownShip = ownShipToViewModel(ship, field, typeData);
+                        if(ship.landedShips.size() > 0)
+                        {
+                            var minResultLandedShip = ship.landedShips.get(0);
+                            var landedShipTypes = new HashMap<Integer, List<ShipData>>();
 
-						ownShip.energie = ship.getEnergy();
-						ownShip.maxEnergie = typeData.getEps();
+                            for (var landedShip: ship.landedShips) {
+                                if(!landedShipTypes.containsKey(landedShip.type)) landedShipTypes.put(landedShip.type, new ArrayList<>());
+                                landedShipTypes.get(landedShip.type).add(landedShip);
+                            }
 
-						ownShip.ueberhitzung = ship.getHeat();
-
-						ownShip.kannFliegen = typeData.getCost() > 0 && !ship.isDocked() && !ship.isLanded();
-
-						int sensorRange = ship.getEffectiveScanRange();
-						if (field.getNebel() != null)
-						{
-							if(!ship.getTypeData().hasFlag(ShipTypeFlag.NEBELSCAN))
-							{
-								sensorRange /= 2;
-							}
-						}
-						ownShip.sensorRange = sensorRange;
-
-						shipObj = ownShip;
+                            for (var landedShiptype: landedShipTypes.keySet()) {
+                                ownShip.landedShips.add(getLandedShipMinValues(landedShipTypes.get(landedShiptype), allShipTypes.get(landedShiptype)));
+                            }
+                        }
+                        shipObj = ownShip;
 					}
 					else
 					{
 						shipObj = new MapController.SectorViewModel.ShipViewModel();
                         shipObj.isOwner = false;
 					}
-					shipObj.id = ship.getId();
-					shipObj.name = ship.getName();
-					shipObj.gedockt = ship.getDockedCount();
-					shipObj.maxGedockt = typeData.getADocks();
-                    shipObj.race = ship.getOwner().getRace();
 
-					if (ship.getFleet() != null)
+
+                    addCommonDataToViewModel(shipObj, ship, typeData);
+
+					if (ship.fleetId != null)
+
 					{
-						shipObj.fleet = ShipFleetViewModel.map(ship.getFleet());
+						shipObj.fleet = new ShipFleetViewModel(ship.fleetId, ship.fleetName);
 					}
 
 					jsonShiptype.ships.add(shipObj);
@@ -515,113 +472,184 @@ public class StarmapController implements DSController, PermissionResolver {
 		return users;
 	}
 
-    private List<MapController.SectorViewModel.BattleViewModel> exportSectorBattles(Session db, FieldView field)
+    private MapController.SectorViewModel.OwnShipViewModel ownShipToViewModel(ShipData ship, FieldView field, net.driftingsouls.ds2.server.map.ShipTypeData typeData)
+    {
+        MapController.SectorViewModel.OwnShipViewModel ownShip = new MapController.SectorViewModel.OwnShipViewModel();
+        ownShip.gelandet = ship.landedShipCount;
+        ownShip.maxGelandet = typeData.fighterDocks;
+
+        ownShip.energie = ship.energy;
+        ownShip.maxEnergie = typeData.maxEnergy;
+        ownShip.x = field.getLocation().getX();
+        ownShip.y = field.getLocation().getY();
+
+        ownShip.ueberhitzung = ship.heat;
+
+        ownShip.kannFliegen = typeData.movementCost > 0 && !ship.isDocked && !ship.isLanded;
+
+        int sensorRange = (int)Math.floor(typeData.scanRange * ship.sensors/100d);
+                        /* TODO: Adjust for nebel scan .. we probably need a view again
+						if (field.getNebel() != null)
+						{
+							if(!ship.getTypeData().hasFlag(ShipTypeFlag.NEBELSCAN))
+							{
+								sensorRange /= 2;
+							}
+						}
+                         */
+        ownShip.sensorRange = sensorRange;
+
+        return ownShip;
+    }
+
+    private MapController.SectorViewModel.LandedShipViewModel landedShipToViewModel(ShipData ship, net.driftingsouls.ds2.server.map.ShipTypeData typeData)
+    {
+        MapController.SectorViewModel.LandedShipViewModel landedShip = new MapController.SectorViewModel.LandedShipViewModel();
+        landedShip.id = ship.id;
+        landedShip.carrierId = ship.carrierId;
+        landedShip.energie = ship.energy;
+        landedShip.maxEnergie = typeData.maxEnergy;
+        landedShip.name = ship.name;
+        landedShip.type = ship.type;
+        landedShip.typeName = typeData.name;
+        landedShip.picture = typeData.picture;
+
+        return landedShip;
+    }
+
+    private MapController.SectorViewModel.LandedShipViewModel getLandedShipMinValues(List<ShipData> landedShips, ShipTypeData typeData)
+    {
+        //result.energie = Math.min(result.energie, second.energie);
+        int energy = Integer.MAX_VALUE;
+        Map<Integer, ShipData.ShipDataAmmo> minAmmos = new HashMap<>();
+        HashSet<Integer> ammoIds = new HashSet<>();
+
+        for (var landedShip: landedShips) {
+            ammoIds.addAll(landedShip.getAmmo().keySet());
+        }
+        for (var ammoId: ammoIds) {
+            minAmmos.put(ammoId, new ShipData.ShipDataAmmo(ammoId, Long.MAX_VALUE, ""));
+        }
+
+        for(var landedShip: landedShips)
+        {
+            var cargoedAmmos = landedShip.getAmmo();
+            for (var ammoId: ammoIds) {
+                if(cargoedAmmos.containsKey(ammoId))
+                {
+                    minAmmos.put(ammoId, new ShipData.ShipDataAmmo(ammoId, Math.min(cargoedAmmos.get(ammoId).amount, minAmmos.get(ammoId).amount), ItemRepository.getInstance().getItemData(ammoId).getPicture()));
+                }
+                else minAmmos.put(ammoId, new ShipData.ShipDataAmmo(ammoId, 0, ItemRepository.getInstance().getItemData(ammoId).getPicture()));
+            }
+            energy = Math.min(energy, landedShip.energy);
+        }
+
+        var firstShip = landedShips.get(0);
+        var result = new MapController.SectorViewModel.LandedShipViewModel();
+        result.carrierId = firstShip.carrierId;
+        result.ammoCargo = new ArrayList<>();
+        result.energie = energy;
+        result.picture = typeData.picture;
+        result.maxEnergie = typeData.maxEnergy;
+        result.type = typeData.id;
+        result.typeName = typeData.name;
+        result.count = landedShips.size();
+
+
+        for (var minAmmo: minAmmos.values()) {
+            result.ammoCargo.add(new MapController.SectorViewModel.LandedShipViewModel.AmmoCargo(minAmmo.id, minAmmo.amount, minAmmo.picture));
+        }
+
+        return result;
+    }
+
+
+    private void addCommonDataToViewModel(MapController.SectorViewModel.ShipViewModel shipObj, ShipData ship, net.driftingsouls.ds2.server.map.ShipTypeData typeData)
+    {
+        shipObj.id = ship.id;
+        shipObj.name = ship.name;
+        shipObj.gedockt = ship.dockedShips;
+        shipObj.maxGedockt = typeData.externalDocks;
+        shipObj.isOwner = ship.ownerId == user.getId();
+        shipObj.race = ship.ownerRaceId;
+    }
+
+    private List<MapController.SectorViewModel.BattleViewModel> exportSectorBattles(FieldView field, boolean hasBattleScanner)
 	{
 		List<MapController.SectorViewModel.BattleViewModel> battleListObj = new ArrayList<>();
-		List<Battle> battles = field.getBattles();
+		List<BattleData> battles = field.getBattles();
 		if (battles.isEmpty())
 		{
 			return battleListObj;
 		}
 
 		User user = (User) context.getActiveUser();
-		boolean viewable = context.hasPermission(WellKnownPermission.SCHLACHT_ALLE_AUFRUFBAR);
+		boolean viewable = context.hasPermission(WellKnownPermission.SCHLACHT_ALLE_AUFRUFBAR) || hasBattleScanner;
 
-		if (!viewable)
-		{
-			Map<ShipType, List<Ship>> ships = field.getShips().get(user);
-			if (ships != null && !ships.isEmpty())
-			{
-				for (ShipType shipType : ships.keySet())
-				{
-					if (shipType.getShipClass().isDarfSchlachtenAnsehen()) {
-						viewable = true;
-						break;
-					}
-				}
-			}
-		}
-
-		for (Battle battle : battles)
+		for (BattleData battle : battles)
 		{
 			MapController.SectorViewModel.BattleViewModel battleObj = new MapController.SectorViewModel.BattleViewModel();
-			battleObj.id = battle.getId();
-			battleObj.einsehbar = viewable || battle.getSchlachtMitglied(user) != -1;
+			battleObj.id = battle.id;
 
-			for (int i = 0; i < 2; i++)
-			{
-				MapController.SectorViewModel.BattleSideViewModel sideObj = new MapController.SectorViewModel.BattleSideViewModel();
-				sideObj.commander = UserViewModel.map(battle.getCommander(i));
-				if (battle.getAlly(i) != 0)
-				{
-					Ally ally = (Ally) db.get(Ally.class, battle.getAlly(i));
-					sideObj.ally = AllyViewModel.map(ally);
-				}
-				battleObj.sides.add(sideObj);
-			}
+            if(viewable) {
+                battleObj.einsehbar = true;
+            } else {
+                if(battle.attackerId == user.getId() || battle.attackerAllyId == user.getAlly().getId() ||
+                   battle.defenderId == user.getId() || battle.defenderAllyId == user.getAlly().getId()) {
+                    battleObj.einsehbar = true;
+                } else {
+                    try(var conn = DBUtil.getConnection(context.getEM())) {
+                        var db = DBUtil.getDSLContext(conn);
+                        var select = db.select(count()).from(BATTLES_SHIPS)
+                            .join(SHIPS)
+                            .on(BATTLES_SHIPS.SHIPID.eq(SHIPS.ID))
+                            .where(BATTLES_SHIPS.BATTLEID.eq(battle.id)
+                                .and(SHIPS.OWNER.eq(user.getId())));
+
+                        battleObj.einsehbar = select.fetchOne(count()) > 0;
+                    } catch (SQLException e) {
+                        throw new RuntimeException(e);
+                    }
+                }
+            }
+
+            var attacker = new MapController.SectorViewModel.BattleSideViewModel();
+            attacker.commander = new UserViewModel(battle.attackerRace, battle.attackerId, battle.attackerName, battle.plainAttackerName);
+            if(battle.attackerAllyId != null) {
+                attacker.ally = new AllyViewModel(battle.attackerAllyId, battle.attackerAllyName, battle.plainAttackerAllyName);
+            }
+            battleObj.sides.add(attacker);
+
+            var defender = new MapController.SectorViewModel.BattleSideViewModel();
+            defender.commander = new UserViewModel(battle.defenderRace, battle.defenderId, battle.defenderName, battle.plainDefenderName);
+            if(battle.defenderAllyId != null) {
+                defender.ally = new AllyViewModel(battle.defenderAllyId, battle.defenderAllyName, battle.plainDefenderAllyName);
+            }
+            battleObj.sides.add(defender);
 
 			battleListObj.add(battleObj);
 		}
 		return battleListObj;
 	}
 
-
-    @ViewModel
-    public static class MapViewModel
-    {
-        public static class SystemViewModel
-        {
-            public int id;
-            public int width;
-            public int height;
-        }
-
-        public static class SizeViewModel
-        {
-            public int minx;
-            public int miny;
-            public int maxx;
-            public int maxy;
-        }
-
-        public static class SectorImageViewModel
-        {
-            public String image;
-            public int x;
-            public int y;
-
-            public static MapController.MapViewModel.SectorImageViewModel map(SectorImage image)
-            {
-                MapController.MapViewModel.SectorImageViewModel viewmodel = new MapController.MapViewModel.SectorImageViewModel();
-                viewmodel.image = image.getImage();
-                viewmodel.x = image.getX();
-                viewmodel.y = image.getY();
-                return viewmodel;
-            }
-        }
-
-        public static class LocationViewModel
-        {
-            public int x;
-            public int y;
-            public boolean scan;
-            public MapController.MapViewModel.SectorImageViewModel bg;
-            public int scanner;
-            public String fg;
-            public boolean battle;
-            public boolean roterAlarm;
-        }
-
-        public MapController.MapViewModel.SystemViewModel system;
-        public MapController.MapViewModel.SizeViewModel size;
-        public final List<MapController.MapViewModel.LocationViewModel> locations = new ArrayList<>();
-    }
-
     public static class Error{
         public String text;
 
         public Error(String text){
             this.text = text;
+        }
+    }
+
+    public static class StarsystemsSelectList
+    {
+        public final int id;
+        public final String name;
+
+        public StarsystemsSelectList(int id, String name)
+        {
+
+            this.id = id;
+            this.name = name;
         }
     }
 }

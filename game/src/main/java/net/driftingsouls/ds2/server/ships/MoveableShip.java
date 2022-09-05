@@ -17,6 +17,7 @@ public class MoveableShip {
     private int currentEnergy;
     private int currentHeat;
 
+    private final Location startLocation;
     private Location location;
 
 
@@ -46,13 +47,16 @@ public class MoveableShip {
         this.heatIncrement = heatIncrement;
         this.officer = officer;
         this.location = location;
+        this.startLocation = location;
         this.fleet = fleet;
     }
 
     public int getFleet(){ return fleet; }
 
-    public int computeFlight(Location destination)
+    public int computeFlight(Location destination, boolean force)
     {
+        if(energyCost <= 0) return 0;
+
         int flyableDistance = 0;
         var distance = destination.getXYDistance(location);
         reductions = officer.computeReductions(distance);
@@ -65,7 +69,7 @@ public class MoveableShip {
 
 
         for(int i=0;i<distance;i++){
-            if(heat >= 100 || energy-Math.max(1, flightCost(i)) <= 0 || engine == engineDamage)
+            if((!force && heat >= 100) || (energy-Math.max(1, flightCost(i)) <= 0 || engine == engineDamage ||engine == 0))
             {
                 break;
             }
@@ -73,12 +77,27 @@ public class MoveableShip {
             flyableDistance = i+1;
             heat += Math.max(heatIncrement - reductions.get(i).heat, 2);
             energy -= Math.max(1, flightCost(i));
-            flightData.add(new ShipFlightData(heat, energy, path.get(i))); // location has to be calculated
+            engineDamage += calculateEngineDamage(heat);
+            flightData.add(new ShipFlightData(heat, energy, path.get(i), engineDamage)); // location has to be calculated
 
             // engine damage calculation needs to be calculated here if this method is used for forced flight (flying when heat>=100)
         }
 
         return flyableDistance;
+    }
+
+    public int calculateEngineDamage(int newHeat)
+    {
+        int lastHeat = flightData.size() > 0 ? flightData.get(flightData.size()-1).getHeat() : this.currentHeat;
+
+        if( lastHeat >= 100 ) {
+            if( (ThreadLocalRandom.current().nextInt(101)) < 3*(newHeat-100) ) {
+                int dmg = (int)( (2*(ThreadLocalRandom.current().nextInt(101)/100d)) + 1 ) * (newHeat-100);
+                return dmg;
+            }
+        }
+
+        return 0;
     }
 
     public void Fly(int distance)
@@ -89,6 +108,7 @@ public class MoveableShip {
         this.currentHeat = usedFlightData.getHeat();
         this.currentEnergy = usedFlightData.getEnergy();
         this.location = usedFlightData.getLocation();
+        this.engine = Math.max(0, this.engine - usedFlightData.getEngineDamage());
     }
 
     public int flightCost(int field){
@@ -125,6 +145,10 @@ public class MoveableShip {
     }
     public int getEnergy(){ return currentEnergy; }
     public int getHeat(){ return currentHeat; }
+
+    public Location getStartLocation() {
+        return startLocation;
+    }
 
     public static class ShipMovementOfficer{
         private final int id;
@@ -275,11 +299,13 @@ public class MoveableShip {
         private final int heat;
         private final int energy;
         private final Location location;
-        public ShipFlightData(int heat, int energy, Location location)
+        private final int engineDamage;
+        public ShipFlightData(int heat, int energy, Location location, int engineDamage)
         {
             this.heat = heat;
             this.energy = energy;
             this.location = location;
+            this.engineDamage = engineDamage;
         }
 
         public int getHeat() {
@@ -293,5 +319,7 @@ public class MoveableShip {
         public Location getLocation() {
             return location;
         }
+
+        public int getEngineDamage(){return engineDamage;}
     }
 }

@@ -34,11 +34,12 @@ public class PublicStarmap
 
 	protected Starmap map;
 	protected HashMap<Location, ScanData> scanMap = new HashMap<>();
-	//protected HashMap<Location, ScanData> nebulaScanMap = new HashMap<>();
+	protected HashMap<Location, ScanData> nebulaScanMap = new HashMap<>();
 	protected HashSet<Location> ownShipSectors = new HashSet<>();
 	protected HashSet<Location> allyShipSectors = new HashSet<>();
 	protected HashMap<Location, NonFriendScanData> enemyShipMap;
 	protected HashMap<Location, NonFriendScanData> neutralShipMap;
+	protected HashMap<Location, NonFriendScanData> oneSidedAllyShipMap;
 
 	/**
 	 * Konstruktor.
@@ -178,6 +179,10 @@ public class PublicStarmap
 	public int getScanningShip(Location location)
 	{
 		return -1;
+	}
+
+	public boolean hasRocks(Location location) {
+		return map.getRockPositions().contains(location);
 	}
 
 	protected void buildFriendlyData()

@@ -29,7 +29,6 @@ import static net.driftingsouls.ds2.server.entities.jooq.tables.UserRelations.US
 public class PlayerStarmap extends PublicStarmap
 {
 	private final Map<Location, Integer> scannedLocationsToScannerId;
-	//private final Map<Location, Integer> scannedNebulaLocationsToScannerId;
 	private final Set<Location> sectorsWithAttackingShips;
 	private final Set<Location> bekannteOrte;
 	private final User user;
@@ -52,10 +51,10 @@ public class PlayerStarmap extends PublicStarmap
 			throw new IllegalArgumentException("User may not be null.");
 		}
 		this.userRelationsService = new SingleUserRelationsService(user.getId());
-		buildFriendlyData();
 
 		this.scannedLocationsToScannerId = new HashMap<>();
-		//this.scannedNebulaLocationsToScannerId = new HashMap<>();
+		buildFriendlyData();
+
 		buildScannedLocations();
 		buildNonFriendSectors();
 
@@ -78,6 +77,7 @@ public class PlayerStarmap extends PublicStarmap
 		for(var scanShip : nebulaScanShips)
 		{
 			addScanShipToMap(scanShip, scanMap, true);
+			addScanShipToMap(scanShip, nebulaScanMap, true);
 		}
 	}
 
@@ -85,20 +85,21 @@ public class PlayerStarmap extends PublicStarmap
 	{
 		var scannerLocation = scanShip.getLocation();
 
+		if(scanShip.getOwnerId() == user.getId()) {
+			ownShipSectors.add(scanShip.getLocation());
+		} else {
+			allyShipSectors.add(scanShip.getLocation());
+		}
+
 		if (getNebula(scannerLocation) != null && !isNebulaScanner)
 		{
+			if(scanShip.getScanRange() > 0) scannedLocationsToScannerId.put(scanShip.getLocation(),scanShip.getShipId());
 			scanShip = new ScanData(scanShip.getLocation().getSystem(), scanShip.getLocation().getX(), scanShip.getLocation().getY(), scanShip.getShipId(), scanShip.getOwnerId(), (int)(scanShip.getScanRange() * 0.5));
 		}
 
 		if(!targetMap.containsKey(scannerLocation) || targetMap.get(scannerLocation).getScanRange() < scanShip.getScanRange())
 		{
 			targetMap.put(scannerLocation, scanShip);
-		}
-
-		if(scanShip.getOwnerId() == user.getId()) {
-			ownShipSectors.add(scanShip.getLocation());
-		} else {
-			allyShipSectors.add(scanShip.getLocation());
 		}
 	}
 
@@ -182,9 +183,7 @@ public class PlayerStarmap extends PublicStarmap
     @Override
     public int getScanningShip(Location location)
     {
-        var scanShipId = this.scannedLocationsToScannerId.getOrDefault(location, -1);
-
-		return scanShipId;
+		return this.scannedLocationsToScannerId.getOrDefault(location, -1);
     }
 
 	@Override
@@ -232,21 +231,28 @@ public class PlayerStarmap extends PublicStarmap
 			}
 		}
 
-		if(!map.isNebula(location) || scannedLocationsToScannerId.containsKey(location))
+		if(map.getRockPositions().contains(location))
 		{
-			if(map.getRockPositions().contains(location))
+			boolean isRockVisible = false;
+			if(map.isNebula(location))
 			{
-
-				return new SectorImage("data/starmap/base/brocken.png", 0, 0);
-
+				for (var nebelscanner: nebulaScanMap.values()) {
+					isRockVisible = isRockVisible || (nebelscanner.getLocation().sameSector(nebelscanner.getScanRange(), location, 0));
+					if(isRockVisible) break;
+				}
 			}
+			else{ isRockVisible = true; }
+
+			if(isRockVisible) return new SectorImage("data/starmap/base/brocken.png", 0, 0);
+		}
+
+		else
+		{
+
 		}
 
 		return null;
 	}
-
-
-
 
 	@Override
 	public SectorImage getSectorOverlayImage(Location location)
@@ -276,13 +282,22 @@ public class PlayerStarmap extends PublicStarmap
 			.filter(base -> base.getOwnerId() != -1)
 			.anyMatch(base -> base.getOwnerId() == user.getId());
 
+
+		Nebel.Typ nebula = this.map.getNebulaMap().get(location);
+		int minSize;
+		if(nebula != null) {
+			minSize = nebula.getMinScansize();
+		} else {
+			minSize = 0;
+		}
+
+
 		int maxEnemyShipSize;
 		int maxNeutralShipSize;
 
 		if(baseInSector || isScanned(location))
 		{
 			boolean scanningShipInSector = scanMap.containsKey(location);
-			Nebel.Typ nebula = this.map.getNebulaMap().get(location);
 			if(!baseInSector && !scanningShipInSector && nebula != null && !nebula.allowsScan()) {
 				maxNeutralShipSize = -1;
 				maxEnemyShipSize = -1;
@@ -322,13 +337,12 @@ public class PlayerStarmap extends PublicStarmap
 		{
 			imageName += "_fa";
 		}
-
-		Nebel.Typ nebula = this.map.getNebulaMap().get(location);
-		int minSize;
-		if(nebula != null) {
-			minSize = nebula.getMinScansize();
-		} else {
-			minSize = 0;
+		else if(oneSidedAllyShipMap.containsKey(location))
+		{
+			if(oneSidedAllyShipMap.get(location).getSize() > minSize)
+			{
+				imageName += "_fa";
+			}
 		}
 
 		if(maxEnemyShipSize > minSize)
@@ -374,16 +388,10 @@ public class PlayerStarmap extends PublicStarmap
 				}
 
 				var nebula = nebulae.get(loc);
-
-				if(nebula != null && scannedPositions.containsKey(loc))
-				{
-					if(scanData.getLocation() == loc)
-					{
+				if(nebula == null || nebula.allowsScan()) {
+					if(!scannedPositions.containsKey(loc) || scanData.getLocation().equals(loc)) {
 						scannedPositions.put(loc, scanData.getShipId());
 					}
-				}
-				else if (nebula == null || nebula.allowsScan()) {
-					scannedPositions.put(loc, scanData.getShipId());
 				}
 			}
 		}
@@ -393,6 +401,7 @@ public class PlayerStarmap extends PublicStarmap
 	{
 		var newEnemyShipMap = new HashMap<Location, NonFriendScanData>();
 		var newNeutralShipMap = new HashMap<Location, NonFriendScanData>();
+		var newOneSidedAllyShipMap = new HashMap<Location, NonFriendScanData>();
 
 		var routine = new GetEnemyShipsInSystem();
 		routine.setUserid(user.getId());
@@ -411,15 +420,20 @@ public class PlayerStarmap extends PublicStarmap
 							record.get(SHIPS.X),
 							record.get(SHIPS.Y),
 							record.get("max_size", Long.class).intValue(),
-							Objects.requireNonNullElse(record.get(USER_RELATIONS.STATUS), 0) == 1
+							record.get("relation_to_user", Long.class).intValue(),
+							record.get("relation_from_user", Long.class).intValue()
 						);
 
-						if (scanData.getIsEnemy())
+						if (scanData.getRelation() == User.Relation.FRIEND)
+						{
+							newOneSidedAllyShipMap.put(scanData.getLocation(), scanData);
+						}
+						else if(scanData.getRelation() == User.Relation.NEUTRAL) {
+							newNeutralShipMap.put(scanData.getLocation(), scanData);
+						}
+						else
 						{
 							newEnemyShipMap.put(scanData.getLocation(), scanData);
-						}
-						else {
-							newNeutralShipMap.put(scanData.getLocation(), scanData);
 						}
 					}
 				}
@@ -436,6 +450,7 @@ public class PlayerStarmap extends PublicStarmap
 
 		neutralShipMap = newNeutralShipMap;
 		enemyShipMap = newEnemyShipMap;
+		oneSidedAllyShipMap = newOneSidedAllyShipMap;
 	}
 
 	/**
